@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const useResizablePanels = () => {
+const useResizablePanels = (socketRef: React.MutableRefObject<WebSocket | null>) => {
   const [files, setFiles] = useState([{ name: "main.js", code: "" }]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [language, setLanguage] = useState("javascript");
@@ -11,9 +11,18 @@ const useResizablePanels = () => {
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [resizingTerminal, setResizingTerminal] = useState(false);
 
-  const handleRun = () => {
-    console.log("Running code:", files[activeFileIndex].code);
-  };
+const handleRun = () => {
+  const code = files[activeFileIndex].code;
+  const socket = socketRef.current;
+
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ code, language }));
+  } else {
+    console.warn("WebSocket is not open");
+  }
+};
+
+
 
   const updateCode = (value: string | undefined) => {
     setFiles((prevFiles) => {

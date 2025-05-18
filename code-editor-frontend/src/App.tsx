@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect , useRef } from "react";
 import Sidebar from "./components/sidebar";
 import Toolbar from "./components/toolbar";
 import TabBar from "./components/tabbar";
@@ -8,6 +8,7 @@ import useResizablePanels from "./hooks/handler";
 import "./App.css";
 
 const App: React.FC = () => {
+  const socketRef = useRef<WebSocket | null>(null);
   const {
     files,
     activeFileIndex,
@@ -25,7 +26,7 @@ const App: React.FC = () => {
     toggleTerminal,
     sidebarResizeMouseDown,
     terminalResizeMouseDown,
-  } = useResizablePanels();
+  } = useResizablePanels(socketRef);
 
   const handleAddFile = (filename: string) => {
     filename = filename.trim();
@@ -124,20 +125,22 @@ const App: React.FC = () => {
 
           {/* Terminal Panel */}
           {terminalVisible && (
-            <>
-              <div
-                onMouseDown={terminalResizeMouseDown}
-                className="h-2 bg-gray-600 cursor-row-resize transition-colors hover:bg-gray-500"
-                title="Drag to resize terminal"
-              />
-              <div
-                style={{ height: terminalHeight }}
-                className="bg-black text-green-400 font-mono overflow-auto border-t border-gray-700 shadow-inner"
-              >
-                <CodeTerminal />
-              </div>
-            </>
-          )}
+  <>
+    <div
+      onMouseDown={terminalResizeMouseDown}
+      className="h-2 bg-gray-600 cursor-row-resize transition-colors hover:bg-gray-500"
+      title="Drag to resize terminal"
+    />
+   <div
+  style={{ height: terminalHeight }}
+  className="bg-black text-green-400 font-mono overflow-auto border-t border-gray-700 shadow-inner"
+>
+  <CodeTerminal socketRef={socketRef} />
+</div>
+
+  </>
+)}
+
         </div>
       </div>
     </div>

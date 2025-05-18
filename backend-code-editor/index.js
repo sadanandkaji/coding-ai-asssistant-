@@ -1,47 +1,65 @@
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const { runPython } = require("./runner/python");
-const { runJS } = require("./runner/js");
-const { runC } = require("./runner/c");
-const { runCPP } = require("./runner/cpp");
-const { runJava } = require("./runner/java");
+const WebSocket = require("ws");
+const { exec } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
-const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+const wss = new WebSocket.Server({ port: 8000 });
 
-app.post("/run", async (req, res) => {
-  const { code, language, input } = req.body;
+function prefixOutput(output) {
+  return output
+    .split(/\r?\n/)
+    .map((line) => (line.trim() ? `-> ${line}` : line))
+    .join("\n");
+}
 
-  try {
-    let output;
-    switch (language) {
-      case "python":
-        output = await runPython(code, input);
-        break;
-      case "javascript":
-        output = await runJS(code, input);
-        break;
-      case "c":
-        output = await runC(code, input);
-        break;
-      case "cpp":
-        output = await runCPP(code, input);
-        break;
-      case "java":
-        output = await runJava(code, input);
-        break;
-      default:
-        return res.status(400).json({ error: "Unsupported language" });
+function runCode(code, callback) {
+  const tmpFile = path.join(os.tmpdir(), `temp_${Date.now()}.js`);
+  fs.writeFile(tmpFile, code, (writeErr) => {
+    if (writeErr) {
+      callback(writeErr, null, null);
+      return;
     }
-    res.json({ output });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+
+    exec(`node "${tmpFile}"`, (execErr, stdout, stderr) => {
+      fs.unlink(tmpFile, (unlinkErr) => {
+        if (unlinkErr) {
+          console.error("Failed to delete temp file:", unlinkErr);
+        }
+      });
+
+      callback(execErr, stdout, stderr);
+    });
+  });
+}
+
+wss.on("connection", (ws) => {
+  console.log("⚡ Client connected");
+  ws.send("✅ Connected to server\n");
+
+  ws.on("message", (msg) => {
+    try {
+      const { code, language } = JSON.parse(msg);
+      console.log("Received:", JSON.stringify({ code, language }));
+
+      if (language === "javascript") {
+        runCode(code, (err, stdout, stderr) => {
+          if (err) {
+            // Prefix stderr lines
+            const out = prefixOutput(stderr || `❌ Execution error: ${err.message}\n`);
+            ws.send(out);
+          } else {
+            const out = prefixOutput(stdout || "✅ No output\n");
+            ws.send(out);
+          }
+        });
+      } else {
+        ws.send("❌ Language not supported yet.\n");
+      }
+    } catch (err) {
+      ws.send("⚠️ Error parsing code\n");
+    }
+  });
 });
 
-
-app.listen(8000, () => {
-  console.log("Code Runner server running on http://localhost:8000");
-});
+console.log("WebSocket server running on ws://localhost:8000");
